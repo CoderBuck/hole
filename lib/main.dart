@@ -318,8 +318,15 @@ class _ReceivePageState extends State<ReceivePage> {
   }
 }
 
-class QRScannerScreen extends StatelessWidget {
+class QRScannerScreen extends StatefulWidget {
   const QRScannerScreen({super.key});
+
+  @override
+  State<QRScannerScreen> createState() => _QRScannerScreenState();
+}
+
+class _QRScannerScreenState extends State<QRScannerScreen> {
+  bool _hasScanned = false;
 
   @override
   Widget build(BuildContext context) {
@@ -327,9 +334,12 @@ class QRScannerScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('Scan Ticket QR Code')),
       body: MobileScanner(
         onDetect: (capture) {
+          if (_hasScanned) return; // Guard against multiple pops
+          
           final List<Barcode> barcodes = capture.barcodes;
           for (final barcode in barcodes) {
             if (barcode.rawValue != null) {
+              _hasScanned = true;
               Navigator.pop(context, barcode.rawValue);
               break;
             }
