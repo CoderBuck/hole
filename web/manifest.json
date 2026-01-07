@@ -1,6 +1,6 @@
 {
-    "name": "sendme_app",
-    "short_name": "sendme_app",
+    "name": "hole",
+    "short_name": "hole",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

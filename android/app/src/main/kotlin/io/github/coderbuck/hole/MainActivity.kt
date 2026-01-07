@@ -1,4 +1,4 @@
-package com.example.sendme_app
+package io.github.coderbuck.hole
 
 import io.flutter.embedding.android.FlutterActivity
 

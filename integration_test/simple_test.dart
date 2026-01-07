@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sendme_app/main.dart';
-import 'package:sendme_app/src/rust/frb_generated.dart';
+import 'package:hole/main.dart';
+import 'package:hole/src/rust/frb_generated.dart';
 import 'package:integration_test/integration_test.dart';
 
 void main() {

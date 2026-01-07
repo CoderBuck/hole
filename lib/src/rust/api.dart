@@ -8,14 +8,12 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `get_secret`
 
-/// Starts an iroh node to share a specific file.
 Stream<String> startSend({required String filePath, required String dataDir}) =>
     RustLib.instance.api.crateApiStartSend(
       filePath: filePath,
       dataDir: dataDir,
     );
 
-/// Receives a file using a ticket.
 Stream<String> receiveFile({
   required String ticketStr,
   required String dataDir,
