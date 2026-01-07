@@ -35,23 +35,20 @@ jobs:
       - name: Install dependencies
         run: |
           cargo install flutter_rust_bridge_codegen --version 2.11.1
-          cd hole
           flutter pub get
 
       - name: Generate Rust bindings
         run: |
-          cd hole
           flutter_rust_bridge_codegen generate --config-file flutter_rust_bridge.yaml
 
       - name: Build arm64 APK
         run: |
-          cd hole
           flutter build apk --release --target-platform android-arm64
 
       - name: Create Release and Upload APK
         uses: softprops/action-gh-release@v2
         with:
-          files: hole/build/app/outputs/flutter-apk/app-release.apk
+          files: build/app/outputs/flutter-apk/app-release.apk
           name: Release ${{ github.ref_name }}
           draft: false
           prerelease: false
