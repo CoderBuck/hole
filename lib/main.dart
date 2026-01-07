@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -179,56 +180,39 @@ class _ReceivePageState extends State<ReceivePage> {
     final ticket = _controller.text.trim();
     if (ticket.isEmpty || _isDownloading) return;
 
-    // Proper permission check for Android
-    if (await _requestPermissions()) {
-      setState(() {
-        _isDownloading = true;
-        _logs = ["Starting download..."];
-      });
+    setState(() {
+      _isDownloading = true;
+      _logs = ["Starting download..."];
+    });
 
+    try {
       final appDir = await getApplicationDocumentsDirectory();
-      final downloadDir = await getDownloadsDirectory() ?? await getApplicationDocumentsDirectory();
+      // Use app private directory for downloads to avoid needing external storage permissions
+      final downloadDir = Directory('${appDir.path}/downloads');
+      if (!await downloadDir.exists()) {
+        await downloadDir.create(recursive: true);
+      }
       
-      try {
-        final stream = receiveFile(
-          ticketStr: ticket,
-          dataDir: appDir.path,
-          downloadDir: downloadDir.path
-        );
+      final stream = receiveFile(
+        ticketStr: ticket,
+        dataDir: appDir.path,
+        downloadDir: downloadDir.path
+      );
 
-        await for (final msg in stream) {
-          setState(() {
-            _logs.add(msg);
-          });
-        }
-      } catch (e) {
+      await for (final msg in stream) {
         setState(() {
-          _logs.add("Error: $e");
-        });
-      } finally {
-        setState(() {
-          _isDownloading = false;
+          _logs.add(msg);
         });
       }
-    } else {
+    } catch (e) {
       setState(() {
-        _logs.add("Error: Storage permission denied");
+        _logs.add("Error: $e");
+      });
+    } finally {
+      setState(() {
+        _isDownloading = false;
       });
     }
-  }
-
-  Future<bool> _requestPermissions() async {
-    // Android 13+ (API 33+)
-    if (await Permission.manageExternalStorage.isGranted) return true;
-    
-    Map<Permission, PermissionStatus> statuses = await [
-      Permission.storage,
-      // For Android 11+ to save to Downloads
-      Permission.manageExternalStorage, 
-    ].request();
-    
-    return statuses[Permission.storage]!.isGranted || 
-           statuses[Permission.manageExternalStorage]!.isGranted;
   }
 
   @override
