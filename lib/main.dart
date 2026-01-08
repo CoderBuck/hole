@@ -325,6 +325,43 @@ class _ReceivePageState extends State<ReceivePage> with AutomaticKeepAliveClient
   @override
   bool get wantKeepAlive => true;
 
+  @override
+  void initState() {
+    super.initState();
+    _loadRecentDownloads();
+  }
+
+  Future<void> _loadRecentDownloads() async {
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final downloadDir = Directory('${appDir.path}/downloads');
+      if (await downloadDir.exists()) {
+        final List<FileSystemEntity> entities = await downloadDir.list().toList();
+        final List<ReceivedFile> files = [];
+        for (final entity in entities) {
+          if (entity is File) {
+            final stat = await entity.stat();
+            files.add(ReceivedFile(
+              name: entity.path.split('/').last,
+              path: entity.path,
+              time: stat.modified,
+            ));
+          }
+        }
+        // Sort by time, newest first
+        files.sort((a, b) => b.time.compareTo(a.time));
+        
+        if (mounted) {
+          setState(() {
+            _receivedFiles = files;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Error loading recent downloads: $e");
+    }
+  }
+
   Future<void> _startDownload() async {
     final ticket = _controller.text.trim();
     if (ticket.isEmpty || _isDownloading) return;
