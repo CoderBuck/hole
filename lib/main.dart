@@ -416,6 +416,36 @@ class _ReceivePageState extends State<ReceivePage> with AutomaticKeepAliveClient
     }
   }
 
+  Widget _buildFileThumbnail(String path, ColorScheme colorScheme) {
+    final extension = path.split('.').last.toLowerCase();
+    final isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(extension);
+    
+    if (isImage) {
+      return Container(
+        width: 42,
+        height: 42,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          color: colorScheme.surfaceVariant,
+          border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.5)),
+          image: DecorationImage(
+            image: FileImage(File(path)),
+            fit: BoxFit.cover,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Icon(Icons.insert_drive_file_rounded, color: colorScheme.onPrimaryContainer),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -522,14 +552,7 @@ class _ReceivePageState extends State<ReceivePage> with AutomaticKeepAliveClient
                       ),
                       child: ListTile(
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                        leading: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: colorScheme.primaryContainer,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(Icons.insert_drive_file_rounded, color: colorScheme.onPrimaryContainer),
-                        ),
+                        leading: _buildFileThumbnail(file.path, colorScheme),
                         title: Text(
                           file.name,
                           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
