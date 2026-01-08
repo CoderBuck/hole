@@ -6,20 +6,59 @@
 import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `get_secret`
+// These functions are ignored because they are not marked as `pub`: `get_node`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `ChatHandler`, `IrohNode`, `WireMessage`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `accept`, `clone`, `clone`, `fmt`, `fmt`
 
-Stream<String> startSend({required String filePath, required String dataDir}) =>
-    RustLib.instance.api.crateApiStartSend(
-      filePath: filePath,
-      dataDir: dataDir,
-    );
+Stream<IncomingMessage> subscribeMessages() =>
+    RustLib.instance.api.crateApiSubscribeMessages();
+
+Future<String> getMyAddr() => RustLib.instance.api.crateApiGetMyAddr();
+
+Future<String> initNode({required String dataDir}) =>
+    RustLib.instance.api.crateApiInitNode(dataDir: dataDir);
+
+Future<void> sendText({
+  required String targetTicket,
+  required String myTicket,
+  required String text,
+}) => RustLib.instance.api.crateApiSendText(
+  targetTicket: targetTicket,
+  myTicket: myTicket,
+  text: text,
+);
+
+Stream<String> startSend({required String filePath}) =>
+    RustLib.instance.api.crateApiStartSend(filePath: filePath);
 
 Stream<String> receiveFile({
   required String ticketStr,
-  required String dataDir,
   required String downloadDir,
 }) => RustLib.instance.api.crateApiReceiveFile(
   ticketStr: ticketStr,
-  dataDir: dataDir,
   downloadDir: downloadDir,
 );
+
+class IncomingMessage {
+  final String from;
+  final String text;
+  final String ticket;
+
+  const IncomingMessage({
+    required this.from,
+    required this.text,
+    required this.ticket,
+  });
+
+  @override
+  int get hashCode => from.hashCode ^ text.hashCode ^ ticket.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is IncomingMessage &&
+          runtimeType == other.runtimeType &&
+          from == other.from &&
+          text == other.text &&
+          ticket == other.ticket;
+}

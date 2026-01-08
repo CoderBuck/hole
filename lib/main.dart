@@ -13,6 +13,9 @@ import 'package:hole/src/rust/frb_generated.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await RustLib.init();
+  final appDir = await getApplicationDocumentsDirectory();
+  final nodeId = await initNode(dataDir: appDir.path);
+  debugPrint("Node initialized with ID: $nodeId");
   runApp(const HoleApp());
 }
 
@@ -44,19 +47,496 @@ class HoleApp extends StatelessWidget {
           brightness: Brightness.dark,
         ),
       ),
-      home: const HomeScreen(),
+      home: const MainScreen(),
     );
   }
 }
 
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+class Message {
+  final String text;
+  final bool isMe;
+  final DateTime time;
 
-  @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  Message({required this.text, required this.isMe, required this.time});
 }
 
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+class MainScreen extends StatefulWidget {
+  const MainScreen({super.key});
+
+  @override
+  State<MainScreen> createState() => _MainScreenState();
+}
+
+class _MainScreenState extends State<MainScreen> {
+  int _currentIndex = 0;
+  final Map<String, List<Message>> _allMessages = {};
+  final List<Friend> _friends = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _initMessageSubscription();
+  }
+
+  void _initMessageSubscription() {
+    subscribeMessages().listen((msg) {
+      debugPrint("DEBUG: [Receiver] Got message from ${msg.from}: ${msg.text}");
+      setState(() {
+        // Find existing friend or create new one with the ticket provided in message
+        int friendIndex = _friends.indexWhere((f) => f.nodeId == msg.from);
+        if (friendIndex == -1) {
+          _friends.add(Friend(
+            nodeId: msg.from,
+            addr: msg.ticket, // Use the full ticket from the message!
+            alias: "Friend ${msg.from.substring(0, 4)}",
+          ));
+        } else {
+          // Update ticket if it changed or was incomplete
+          _friends[friendIndex] = Friend(
+            nodeId: msg.from,
+            addr: msg.ticket,
+            alias: _friends[friendIndex].alias,
+          );
+        }
+
+        final list = _allMessages[msg.from] ?? [];
+        list.add(Message(text: msg.text, isMe: false, time: DateTime.now()));
+        _allMessages[msg.from] = list;
+      });
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: IndexedStack(
+        index: _currentIndex,
+        children: [
+          ChatListScreen(
+            friends: _friends,
+            messages: _allMessages,
+            onAddFriend: (f) => setState(() => _friends.add(f)),
+          ),
+          const TransferScreen(),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (index) {
+          setState(() {
+            _currentIndex = index;
+          });
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.chat_bubble_outline_rounded),
+            selectedIcon: Icon(Icons.chat_bubble_rounded),
+            label: 'Chats',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.swap_horiz_rounded),
+            selectedIcon: Icon(Icons.swap_horizontal_circle_rounded),
+            label: 'Transfer',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class Friend {
+  final String nodeId;
+  final String addr;
+  final String alias;
+
+  Friend({required this.nodeId, required this.addr, required this.alias});
+}
+
+class ChatListScreen extends StatefulWidget {
+  final List<Friend> friends;
+  final Map<String, List<Message>> messages;
+  final Function(Friend) onAddFriend;
+
+  const ChatListScreen({
+    super.key,
+    required this.friends,
+    required this.messages,
+    required this.onAddFriend,
+  });
+
+  @override
+  State<ChatListScreen> createState() => _ChatListScreenState();
+}
+
+class _ChatListScreenState extends State<ChatListScreen> {
+  Future<void> _showMyQRCode() async {
+    debugPrint("DEBUG: _showMyQRCode clicked");
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      debugPrint("DEBUG: Fetching my address from Rust...");
+      final addr = await getMyAddr();
+      debugPrint("DEBUG: Got address (length: ${addr.length}): $addr");
+      
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+
+      showDialog(
+        context: context,
+        useRootNavigator: true,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text("My Card"),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text("Scan to add me as a friend"),
+                  const SizedBox(height: 20),
+                  Container(
+                    width: 220,
+                    height: 220,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 10,
+                        )
+                      ],
+                    ),
+                    child: QrImageView(
+                      data: addr,
+                      version: QrVersions.auto,
+                      size: 200.0,
+                      errorStateBuilder: (cxt, err) {
+                        return Center(child: Text("QR Error: $err", style: const TextStyle(color: Colors.red)));
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    "Your Node ID / Ticket:",
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceVariant,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: SelectableText(
+                      addr,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 9, fontFamily: 'monospace'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: addr));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Address copied to clipboard')),
+                  );
+                },
+                child: const Text("Copy"),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Close"),
+              ),
+            ],
+          );
+        },
+      );
+    } catch (e) {
+      debugPrint("DEBUG: Error in _showMyQRCode: $e");
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _scanToAddFriend() async {
+    var status = await Permission.camera.request();
+    if (status.isGranted) {
+      if (!mounted) return;
+      final String? code = await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const QRScannerScreen()),
+      );
+
+      if (code != null) {
+        _addFriend(code);
+      }
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Camera permission required')),
+      );
+    }
+  }
+
+  void _addFriend(String ticket) async {
+    if (ticket.isEmpty) return;
+    
+    // Aggressive cleaning
+    ticket = ticket.trim().replaceAll(RegExp(r'[\r\n\t]'), '');
+    if (ticket.startsWith('TICKET:')) {
+      ticket = ticket.substring(7);
+    }
+    
+    // Parse NodeID for local display
+    final nodeId = ticket.length > 64 ? ticket.substring(0, 10) : ticket; // Simplified
+    
+    final newFriend = Friend(
+      nodeId: nodeId,
+      addr: ticket, // Now ticket is cleaned
+      alias: "Friend ${nodeId.substring(0, nodeId.length > 6 ? 6 : nodeId.length)}",
+    );
+
+    if (!widget.friends.any((f) => f.addr == ticket)) {
+      widget.onAddFriend(newFriend);
+      
+      // AUTO HANDSHAKE: Send a message to let them know who we are
+      try {
+        final myTicket = await getMyAddr();
+        debugPrint("DEBUG: [Handshake] Cleaned TargetTicket len=${ticket.length}, MyTicket len=${myTicket.length}");
+        await sendText(targetTicket: ticket, my_ticket: myTicket, text: "Hey! I added you.");
+      } catch (e) {
+        debugPrint("Handshake failed: $e");
+      }
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Friend added!')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'Hole Chat',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        actions: [
+          IconButton(
+            onPressed: _showMyQRCode,
+            icon: const Icon(Icons.qr_code_rounded),
+            tooltip: "My QR Code",
+          ),
+          IconButton(
+            onPressed: _scanToAddFriend,
+            icon: const Icon(Icons.person_add_rounded),
+            tooltip: "Add Friend",
+          ),
+        ],
+      ),
+      body: widget.friends.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.chat_bubble_outline_rounded,
+                      size: 64, color: colorScheme.outlineVariant),
+                  const SizedBox(height: 16),
+                  const Text("No friends yet"),
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    onPressed: _scanToAddFriend,
+                    icon: const Icon(Icons.qr_code_scanner_rounded),
+                    label: const Text("Add Friend"),
+                  ),
+                ],
+              ),
+            )
+          : ListView.builder(
+              itemCount: widget.friends.length,
+              itemBuilder: (ctx, i) {
+                final friend = widget.friends[i];
+                final lastMsg = widget.messages[friend.nodeId]?.last;
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: colorScheme.primaryContainer,
+                    child: Text(friend.alias[0]),
+                  ),
+                  title: Text(friend.alias),
+                  subtitle: Text(
+                    lastMsg?.text ?? friend.nodeId,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ChatScreen(
+                          friend: friend,
+                          messages: widget.messages[friend.nodeId] ?? [],
+                        ),
+                      ),
+                    ).then((_) => setState(() {}));
+                  },
+                );
+              },
+            ),
+    );
+  }
+}
+
+class ChatScreen extends StatefulWidget {
+  final Friend friend;
+  final List<Message> messages;
+
+  const ChatScreen({super.key, required this.friend, required this.messages});
+
+  @override
+  State<ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends State<ChatScreen> {
+  final TextEditingController _controller = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+
+  void _sendMessage() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty) return;
+
+    _controller.clear();
+    setState(() {
+      widget.messages.add(Message(text: text, isMe: true, time: DateTime.now()));
+    });
+    
+    _scrollToBottom();
+
+    try {
+      final myTicket = await getMyAddr();
+      debugPrint("DEBUG: [Chat] TargetTicket len=${widget.friend.addr.length}, MyTicket len=${myTicket.length}, Text len=${text.length}");
+      await sendText(targetTicket: widget.friend.addr, myTicket: myTicket, text: text);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Send failed: $e')),
+      );
+    }
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.friend.alias),
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: ListView.builder(
+              controller: _scrollController,
+              padding: const EdgeInsets.all(16),
+              itemCount: widget.messages.length,
+              itemBuilder: (ctx, i) {
+                final msg = widget.messages[i];
+                return Align(
+                  alignment: msg.isMe ? Alignment.centerRight : Alignment.centerLeft,
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: msg.isMe ? colorScheme.primary : colorScheme.surfaceVariant,
+                      borderRadius: BorderRadius.circular(20).copyWith(
+                        bottomRight: msg.isMe ? const Radius.circular(0) : null,
+                        bottomLeft: !msg.isMe ? const Radius.circular(0) : null,
+                      ),
+                    ),
+                    child: Text(
+                      msg.text,
+                      style: TextStyle(
+                        color: msg.isMe ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              border: Border(top: BorderSide(color: colorScheme.outlineVariant)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    decoration: const InputDecoration(
+                      hintText: 'Type a message...',
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 16),
+                    ),
+                    onSubmitted: (_) => _sendMessage(),
+                  ),
+                ),
+                IconButton(
+                  onPressed: _sendMessage,
+                  icon: const Icon(Icons.send_rounded),
+                  color: colorScheme.primary,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class TransferScreen extends StatefulWidget {
+  const TransferScreen({super.key});
+
+  @override
+  State<TransferScreen> createState() => _TransferScreenState();
+}
+
+class _TransferScreenState extends State<TransferScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
   @override
@@ -149,7 +629,6 @@ class _SendPageState extends State<SendPage> with AutomaticKeepAliveClientMixin 
       try {
         final stream = startSend(
           filePath: _selectedPath!, 
-          dataDir: appDir.path
         );
         
         await for (final msg in stream) {
@@ -380,7 +859,6 @@ class _ReceivePageState extends State<ReceivePage> with AutomaticKeepAliveClient
       
       final stream = receiveFile(
         ticketStr: ticket,
-        dataDir: appDir.path,
         downloadDir: downloadDir.path
       );
 

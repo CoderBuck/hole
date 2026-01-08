@@ -64,7 +64,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => -1823578080;
+  int get rustContentHash => -1756359997;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -75,16 +75,24 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
+  Future<String> crateApiGetMyAddr();
+
+  Future<String> crateApiInitNode({required String dataDir});
+
   Stream<String> crateApiReceiveFile({
     required String ticketStr,
-    required String dataDir,
     required String downloadDir,
   });
 
-  Stream<String> crateApiStartSend({
-    required String filePath,
-    required String dataDir,
+  Future<void> crateApiSendText({
+    required String targetTicket,
+    required String myTicket,
+    required String text,
   });
+
+  Stream<String> crateApiStartSend({required String filePath});
+
+  Stream<IncomingMessage> crateApiSubscribeMessages();
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -96,9 +104,63 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
+  Future<String> crateApiGetMyAddr() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 1,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiGetMyAddrConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiGetMyAddrConstMeta =>
+      const TaskConstMeta(debugName: "get_my_addr", argNames: []);
+
+  @override
+  Future<String> crateApiInitNode({required String dataDir}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(dataDir, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 2,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiInitNodeConstMeta,
+        argValues: [dataDir],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiInitNodeConstMeta =>
+      const TaskConstMeta(debugName: "init_node", argNames: ["dataDir"]);
+
+  @override
   Stream<String> crateApiReceiveFile({
     required String ticketStr,
-    required String dataDir,
     required String downloadDir,
   }) {
     final sink = RustStreamSink<String>();
@@ -108,13 +170,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           callFfi: (port_) {
             final serializer = SseSerializer(generalizedFrbRustBinding);
             sse_encode_String(ticketStr, serializer);
-            sse_encode_String(dataDir, serializer);
             sse_encode_String(downloadDir, serializer);
             sse_encode_StreamSink_String_Sse(sink, serializer);
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 1,
+              funcId: 3,
               port: port_,
             );
           },
@@ -123,7 +184,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             decodeErrorData: sse_decode_AnyhowException,
           ),
           constMeta: kCrateApiReceiveFileConstMeta,
-          argValues: [ticketStr, dataDir, downloadDir, sink],
+          argValues: [ticketStr, downloadDir, sink],
           apiImpl: this,
         ),
       ),
@@ -133,14 +194,47 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   TaskConstMeta get kCrateApiReceiveFileConstMeta => const TaskConstMeta(
     debugName: "receive_file",
-    argNames: ["ticketStr", "dataDir", "downloadDir", "sink"],
+    argNames: ["ticketStr", "downloadDir", "sink"],
   );
 
   @override
-  Stream<String> crateApiStartSend({
-    required String filePath,
-    required String dataDir,
+  Future<void> crateApiSendText({
+    required String targetTicket,
+    required String myTicket,
+    required String text,
   }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(targetTicket, serializer);
+          sse_encode_String(myTicket, serializer);
+          sse_encode_String(text, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 4,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiSendTextConstMeta,
+        argValues: [targetTicket, myTicket, text],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSendTextConstMeta => const TaskConstMeta(
+    debugName: "send_text",
+    argNames: ["targetTicket", "myTicket", "text"],
+  );
+
+  @override
+  Stream<String> crateApiStartSend({required String filePath}) {
     final sink = RustStreamSink<String>();
     unawaited(
       handler.executeNormal(
@@ -148,12 +242,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           callFfi: (port_) {
             final serializer = SseSerializer(generalizedFrbRustBinding);
             sse_encode_String(filePath, serializer);
-            sse_encode_String(dataDir, serializer);
             sse_encode_StreamSink_String_Sse(sink, serializer);
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 2,
+              funcId: 5,
               port: port_,
             );
           },
@@ -162,7 +255,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             decodeErrorData: sse_decode_AnyhowException,
           ),
           constMeta: kCrateApiStartSendConstMeta,
-          argValues: [filePath, dataDir, sink],
+          argValues: [filePath, sink],
           apiImpl: this,
         ),
       ),
@@ -172,8 +265,40 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   TaskConstMeta get kCrateApiStartSendConstMeta => const TaskConstMeta(
     debugName: "start_send",
-    argNames: ["filePath", "dataDir", "sink"],
+    argNames: ["filePath", "sink"],
   );
+
+  @override
+  Stream<IncomingMessage> crateApiSubscribeMessages() {
+    final sink = RustStreamSink<IncomingMessage>();
+    unawaited(
+      handler.executeNormal(
+        NormalTask(
+          callFfi: (port_) {
+            final serializer = SseSerializer(generalizedFrbRustBinding);
+            sse_encode_StreamSink_incoming_message_Sse(sink, serializer);
+            pdeCallFfi(
+              generalizedFrbRustBinding,
+              serializer,
+              funcId: 6,
+              port: port_,
+            );
+          },
+          codec: SseCodec(
+            decodeSuccessData: sse_decode_unit,
+            decodeErrorData: sse_decode_AnyhowException,
+          ),
+          constMeta: kCrateApiSubscribeMessagesConstMeta,
+          argValues: [sink],
+          apiImpl: this,
+        ),
+      ),
+    );
+    return sink.stream;
+  }
+
+  TaskConstMeta get kCrateApiSubscribeMessagesConstMeta =>
+      const TaskConstMeta(debugName: "subscribe_messages", argNames: ["sink"]);
 
   @protected
   AnyhowException dco_decode_AnyhowException(dynamic raw) {
@@ -188,9 +313,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  RustStreamSink<IncomingMessage> dco_decode_StreamSink_incoming_message_Sse(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    throw UnimplementedError();
+  }
+
+  @protected
   String dco_decode_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as String;
+  }
+
+  @protected
+  IncomingMessage dco_decode_incoming_message(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return IncomingMessage(
+      from: dco_decode_String(arr[0]),
+      text: dco_decode_String(arr[1]),
+      ticket: dco_decode_String(arr[2]),
+    );
   }
 
   @protected
@@ -227,10 +373,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  RustStreamSink<IncomingMessage> sse_decode_StreamSink_incoming_message_Sse(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    throw UnimplementedError('Unreachable ()');
+  }
+
+  @protected
   String sse_decode_String(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_list_prim_u_8_strict(deserializer);
     return utf8.decoder.convert(inner);
+  }
+
+  @protected
+  IncomingMessage sse_decode_incoming_message(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_from = sse_decode_String(deserializer);
+    var var_text = sse_decode_String(deserializer);
+    var var_ticket = sse_decode_String(deserializer);
+    return IncomingMessage(from: var_from, text: var_text, ticket: var_ticket);
   }
 
   @protected
@@ -290,9 +453,37 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_StreamSink_incoming_message_Sse(
+    RustStreamSink<IncomingMessage> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(
+      self.setupAndSerialize(
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_incoming_message,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+      ),
+      serializer,
+    );
+  }
+
+  @protected
   void sse_encode_String(String self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_list_prim_u_8_strict(utf8.encoder.convert(self), serializer);
+  }
+
+  @protected
+  void sse_encode_incoming_message(
+    IncomingMessage self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.from, serializer);
+    sse_encode_String(self.text, serializer);
+    sse_encode_String(self.ticket, serializer);
   }
 
   @protected
