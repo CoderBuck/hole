@@ -121,12 +121,15 @@ class SendPage extends StatefulWidget {
   State<SendPage> createState() => _SendPageState();
 }
 
-class _SendPageState extends State<SendPage> {
+class _SendPageState extends State<SendPage> with AutomaticKeepAliveClientMixin {
   String? _selectedPath;
   String? _fileName;
   String? _status;
   String? _ticket;
   bool _isSharing = false;
+
+  @override
+  bool get wantKeepAlive => true;
 
   Future<void> _pickAndShare() async {
     if (_isSharing) return;
@@ -170,6 +173,7 @@ class _SendPageState extends State<SendPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final colorScheme = Theme.of(context).colorScheme;
 
     return SingleChildScrollView(
@@ -312,11 +316,14 @@ class ReceivePage extends StatefulWidget {
   State<ReceivePage> createState() => _ReceivePageState();
 }
 
-class _ReceivePageState extends State<ReceivePage> {
+class _ReceivePageState extends State<ReceivePage> with AutomaticKeepAliveClientMixin {
   final _controller = TextEditingController();
   String? _status;
   List<ReceivedFile> _receivedFiles = [];
   bool _isDownloading = false;
+
+  @override
+  bool get wantKeepAlive => true;
 
   Future<void> _startDownload() async {
     final ticket = _controller.text.trim();
@@ -374,6 +381,7 @@ class _ReceivePageState extends State<ReceivePage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final colorScheme = Theme.of(context).colorScheme;
 
     return Padding(
